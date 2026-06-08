@@ -31,7 +31,6 @@ dependencies = [
     "eclipse-zenoh",
     "telekinesis-datatypes",
     "numpy",
-    "scipy",
 ]
 
 [project.optional-dependencies]

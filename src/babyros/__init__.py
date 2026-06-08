@@ -133,6 +133,8 @@ def configure(
         "transport_link_tls_verify_name_on_connect": "transport/link/tls/verify_name_on_connect",
         "transport_link_tx_keep_alive": "transport/link/tx/keep_alive",
         "transport_link_tx_lease": "transport/link/tx/lease",
+        "transport_link_tx_batch_size": "transport/link/tx/batch_size",
+        "transport_link_tx_buffer_size": "transport/link/rx/buffer_size",
         "transport_link_tx_queue_congestion_control_block_wait_before_close": "transport/link/tx/queue/congestion_control/block/wait_before_close",
         "transport_shared_memory_enabled": "transport/shared_memory/enabled",
         "transport_shared_memory_message_size_threshold": "transport/shared_memory/transport_optimization/message_size_threshold",
