@@ -5,7 +5,6 @@ from typing import Union
 import threading
 import weakref
 import atexit
-import time
 import zenoh
 import numpy as np
 from loguru import logger
@@ -59,7 +58,7 @@ class SessionManager:
                 raise RuntimeError("Cannot set config after session has been created. Ensure that 'babyros.configure()' is called before creating any nodes.")
             if config is not None:
                 cls._config = config
-                logger.info("Overwritten default session config with user config.")
+                logger.debug("Overwritten default session config with user config.")
 
     @classmethod
     def get_session_config(cls):
@@ -80,7 +79,7 @@ class SessionManager:
                 raise RuntimeError("Session already exists")
         
             cls._session = zenoh.open(cls._config)
-            logger.success("Zenoh session created successfully.")
+            logger.debug("Zenoh session created successfully.")
 
             return cls._session
 
@@ -130,7 +129,7 @@ class SessionManager:
 
             try:
                 cls._session.close()
-                logger.info("Zenoh session closed successfully.")
+                logger.debug("Zenoh session closed successfully.")
             except Exception as e:
                 logger.error(f"Warning: Error closing session: {e}")
             finally:
@@ -194,10 +193,12 @@ class Publisher:
         """
         Cleanly delete publisher.
         """
+        if self._deleted:
+            return
         self._deleted = True
         self._pub.undeclare()
         SessionManager.unregister_node(self)
-        logger.info(f"Publisher on topic '{self._topic}' deleted.")
+        logger.debug(f"Publisher on topic '{self._topic}' deleted.")
 
 
 class Subscriber:
@@ -262,17 +263,20 @@ class Subscriber:
     def _callback_loop(self):
         """
         The main loop for processing incoming messages.
+
+        Blocks on the handler's recv() so samples are dispatched the instant they
+        arrive (no fixed polling delay) and an idle subscriber consumes no CPU.
+        recv() unblocks by raising when the subscriber is undeclared in delete().
         """
         handler = self._sub.handler
 
         while self._running:
-            sample = handler.try_recv()
+            try:
+                sample = handler.recv()
+            except Exception:
+                # recv() raises once the subscriber is undeclared (see delete()).
+                break
 
-            if sample is None:
-                # 1ms polling
-                time.sleep(0.001)
-                continue
-            
             try:
                 # Convert Zenoh buffers to standard bytes
                 payload = sample.payload.to_bytes()
@@ -283,18 +287,21 @@ class Subscriber:
             except Exception as e:
                 logger.error(f"Failed to decode message on topic '{self._topic}': {e}")
                 continue
-            
+
             try:
                 self._callback(data)
             except Exception as e:
                 logger.error(f"Callback error on {self._topic}: {e}")
 
-    def delete(self):
+    def delete(self, timeout: float = 1.0):
         """
         Cleanly shut down the subscriber and wait for the worker.
 
         Args:
-            None
+            timeout (float): Max seconds to wait for the worker thread to
+                finish an in-flight callback. If it's still running after this,
+                a warning is logged and the wait is abandoned (the callback
+                finishes in the background). Default 1.0.
 
         Returns:
             None
@@ -302,18 +309,25 @@ class Subscriber:
         Raises:
             None
         """
-        logger.info(f"Deleting Subscriber on '{self._topic}'...")
+        if self._deleted:
+            return
         self._running = False
         self._deleted = True
 
-        # Wait for the worker thread to finish its last loop
-        if self._callback_worker.is_alive():
-            self._callback_worker.join(timeout=1.0)
-            
-        # Unsubscribe from the network
+        # Undeclare first: this unblocks the worker's blocking recv() so it can
+        # exit, then we wait for the thread to finish.
         self._sub.undeclare()
+        if self._callback_worker.is_alive():
+            self._callback_worker.join(timeout=timeout)
+            if self._callback_worker.is_alive():
+                logger.warning(
+                    f"Subscriber on '{self._topic}': worker still running a "
+                    f"callback after {timeout}s; abandoning the wait "
+                    f"(it will finish in the background)."
+                )
+
         SessionManager.unregister_node(self)
-        logger.info(f"Subscriber on '{self._topic}' deleted.")
+        logger.debug(f"Subscriber on '{self._topic}' deleted.")
 
 
 class Server:
@@ -355,7 +369,8 @@ class Server:
         """
         Handle a client request using Zenoh query/reply correctly.
         """
-        logger.info(f"Received request on '{query.selector}'")
+        # Per-request: keep at DEBUG so high request rates don't flood logs.
+        logger.debug(f"Received request on '{query.selector}'")
 
         try:
             request_data = None
@@ -392,10 +407,12 @@ class Server:
         Raises:
             None
         """
+        if self._deleted:
+            return
         self._deleted = True
         self._queryable.undeclare()
         SessionManager.unregister_node(self)
-        logger.info(f"Server on topic '{self._topic}' deleted.")
+        logger.debug(f"Server on topic '{self._topic}' deleted.")
 
 
 class Client:
@@ -403,31 +420,42 @@ class Client:
     BabyROS Client based on Zenoh queries.
     """
 
-    def __init__(self, topic: str):
+    def __init__(self, topic: str, timeout: Union[float, None] = None):
         """
         Initialize the BabyROS Client.
 
         Args:
             topic (str): The topic to send requests to.
+            timeout (float, optional): Max seconds request() waits for replies
+                before returning what it has. Defaults to None, which uses
+                Zenoh's own default (the 'queries_default_timeout' config,
+                ~10s unless changed via babyros.configure()). Pass a smaller
+                value for bounded real-time requests.
 
         Returns:
             None
 
         Raises:
-            None
+            ValueError: If the topic or timeout is invalid.
         """
         if not isinstance(topic, str) or not topic:
             raise ValueError("Invalid topic: topic must be a non-empty string.")
         if topic[0] == "/":
             raise ValueError("Topic names should not start with '/'.")
-        
+        if timeout is not None and (not isinstance(timeout, (int, float)) or timeout <= 0):
+            raise ValueError("timeout must be a positive number (seconds).")
+
         self._topic = topic
+        self._timeout = timeout
         self._deleted = False
         self._codec = serializer.ZenohCodec()
         self._session = SessionManager.get_session()
         SessionManager.register_node(self)
 
-        self._querier = self._session.declare_querier(self._topic)
+        # Querier.get() takes no timeout, so the deadline is set here at
+        # declaration time and applies to every request(). timeout=None lets
+        # Zenoh apply its own configured default.
+        self._querier = self._session.declare_querier(self._topic, timeout=timeout)
 
     def request(self, data=None):
         """
@@ -465,8 +493,15 @@ class Client:
                 results.append(decoded_val)
             else:
                 err_msg = reply.err.payload.to_string()
-                logger.error(f"Server error on {self._topic}: {err_msg}")
-        
+                # A query timeout arrives as an error reply with payload "Timeout".
+                # That's a client-side deadline, not a server failure - log it
+                # distinctly so it isn't misdiagnosed.
+                if err_msg.lower() == "timeout":
+                    deadline = self._timeout if self._timeout is not None else "default"
+                    logger.warning(f"Request to '{self._topic}' timed out ({deadline}s).")
+                else:
+                    logger.error(f"Server error on {self._topic}: {err_msg}")
+
         return results
 
     def delete(self):
@@ -482,10 +517,12 @@ class Client:
         Raises:
             None
         """
+        if self._deleted:
+            return
         self._deleted = True
         self._querier.undeclare()
         SessionManager.unregister_node(self)
-        logger.info(f"Client for topic '{self._topic}' deleted.")
+        logger.debug(f"Client for topic '{self._topic}' deleted.")
 
 
 def _cleanup():
