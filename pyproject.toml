@@ -30,6 +30,7 @@ classifiers = [
 dependencies = [
     "eclipse-zenoh",
     "numpy",
+    "loguru",
 ]
 
 [project.optional-dependencies]
