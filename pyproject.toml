@@ -43,3 +43,12 @@ docs = [
 [project.urls]
 Documentation = "https://docs.telekinesis.ai"
 "Telekinesis BabyROS Repository" = "https://github.com/telekinesis-ai/babyros"
+
+[project.scripts]
+babyrosbag = "babyrosbag.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/babyros", "src/babyrosbag"]
