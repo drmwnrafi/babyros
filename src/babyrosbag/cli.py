@@ -2,6 +2,26 @@ import argparse
 import sys
 import time
 from babyrosbag.bag import Bag, Time
+from loguru import logger
+
+def discover_topics(timeout: float = 2.0):
+    """Discover all active topics across the Zenoh network using liveliness queries."""
+    try:
+        import babyros
+        session = babyros.node.SessionManager.get_session()
+        discovered_topics = set()
+        replies = session.liveliness().get("**/__liveliness__", timeout=timeout)
+        for reply in replies:
+            if reply.ok:
+                key_expr = str(reply.ok.key_expr)
+                if "/__liveliness__" in key_expr:
+                    topic = key_expr.split("/__liveliness__")[0]
+                    discovered_topics.add(topic)
+        return list(discovered_topics)
+    
+    except Exception as e:
+        logger.error(f"Error discovering topics: {e}")
+        return []
 
 def cmd_record(args):
     try:
@@ -13,10 +33,17 @@ def cmd_record(args):
     print(f"Recording to {args.output}...")
     topics = args.topics if args.topics else []
     
+    # If no topics specified, attempt to discover all active topics
     if not topics:
-        print("No topics specified. Please specify topics, e.g.:")
-        print("  babyrosbag record -O my_bag.bag upper_body_tracking hand_gestures")
-        sys.exit(1)
+        print("No topics specified. Discovering active topics...")
+        topics = discover_topics(timeout=2.0)
+        
+        if not topics:
+            print("❌ No active topics discovered. Please specify topics manually, e.g.:")
+            print("  babyrosbag record -O my_bag.bag imu")
+            sys.exit(1)
+        else:
+            print(f"✓ Discovered {len(topics)} active topic(s): {', '.join(topics)}")
 
     with Bag(args.output, 'w') as bag:
         def make_callback(topic):
@@ -26,16 +53,19 @@ def cmd_record(args):
 
         subscribers = []
         for t in topics:
-            # Assuming babyros uses a similar Subscriber API to ROS
             sub = babyros.node.Subscriber(t, make_callback(t))
             subscribers.append(sub)
             print(f"  Subscribed to: {t}")
                 
+        print("\nRecording... Press Ctrl+C to stop.")
         try:
             while True:
                 time.sleep(0.1)
         except KeyboardInterrupt:
             print("\nStopped recording.")
+            # Clean up subscribers
+            for sub in subscribers:
+                sub.delete()
 
 def cmd_play(args):
     try:
@@ -59,7 +89,6 @@ def cmd_play(args):
                 first_msg_time = t.to_sec()
                 start_play_time = time.time()
                 
-            # Calculate delay for real-time playback
             msg_elapsed = (t.to_sec() - first_msg_time) / args.rate
             play_elapsed = time.time() - start_play_time
             
@@ -98,7 +127,6 @@ def cmd_filter(args):
     with Bag(args.input, 'r') as in_bag, Bag(args.output, 'w') as out_bag:
         count = 0
         for topic, msg, t in in_bag.read_messages():
-            # rosbag filter uses Python expressions evaluated against topic, msg, and t
             try:
                 if eval(args.expression):
                     out_bag.write(topic, msg, t)
@@ -114,7 +142,7 @@ def main():
 
     # Record
     parser_record = subparsers.add_parser('record', help='Record topics to a bag file')
-    parser_record.add_argument('topics', nargs='*', help='Topics to record')
+    parser_record.add_argument('topics', nargs='*', help='Topics to record (if empty, records all active topics)')
     parser_record.add_argument('-O', '--output', default='output.bag', help='Output bag file')
 
     # Play

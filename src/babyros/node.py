@@ -166,6 +166,7 @@ class Publisher:
         SessionManager.register_node(self)
         self._codec = serializer.ZenohCodec()
         self._pub = self._session.declare_publisher(self._topic)
+        self._liveliness_token = self._session.liveliness().declare_token(f"{self._topic}/__liveliness__")
 
     def publish(self, data: Union[dict, np.ndarray]):
         """
@@ -196,6 +197,8 @@ class Publisher:
         if self._deleted:
             return
         self._deleted = True
+        if hasattr(self, '_liveliness_token'):
+            self._liveliness_token.undeclare()
         self._pub.undeclare()
         SessionManager.unregister_node(self)
         logger.debug(f"Publisher on topic '{self._topic}' deleted.")

@@ -45,7 +45,8 @@ Documentation = "https://docs.telekinesis.ai"
 "Telekinesis BabyROS Repository" = "https://github.com/telekinesis-ai/babyros"
 
 [project.scripts]
-babyrosbag = "babyrosbag.cli:main"
+babyros = "babyros.cli:main"
+babyrosbag = "babyrosbag.cli:main" 
 
 [tool.setuptools.packages.find]
 where = ["src"]

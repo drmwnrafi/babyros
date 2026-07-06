@@ -69,6 +69,33 @@ python examples/subscriber_example.py
 
 When testing is done, kill terminal with `Ctrl+C`.
 
+## Recording & Playback (`babyrosbag`)
+
+BabyROS includes a built-in tool for recording and playing back data, similar to ROS `rosbag`.
+
+**Discover active topics in the network:**
+```bash
+babyros topics
+```
+
+Record specific topics to a bag file:
+```bash
+babyrosbag record -O session.bag imu
+```
+(If you omit the topic names, it will automatically discover and record all active topics).
+
+View bag file info:
+```bash
+babyrosbag info session.bag
+```
+
+Play back recorded data:
+```bash
+babyrosbag play session.bag
+```
+
+(You can also adjust playback speed using the -r flag, e.g., babyrosbag play session.bag -r 2.0 for 2x speed).
+
 ## Open Issues
 - Datatype information  
 - Safety checks
