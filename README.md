@@ -53,6 +53,13 @@ Install the Zenoh router. Documentation available in: [Zenoh Docs](https://zenoh
 ## Usage Example
 To see BabyROS in action, you can run the provided example scripts.
 
+### Discover active topics in the network
+```bash
+babyros topics
+```
+
+---
+
 ### Publisher
 Open a terminal and run:
 ```bash
@@ -60,6 +67,8 @@ python examples/publisher_example.py
 ```
 
 When testing is done, kill terminal with `Ctrl+C`.
+
+---
 
 ### Subscriber
 In a second terminal (with the `babyros` environment active), run:
@@ -69,32 +78,51 @@ python examples/subscriber_example.py
 
 When testing is done, kill terminal with `Ctrl+C`.
 
-## Recording & Playback (`babyrosbag`)
+---
+
+### Recording & Playback (`babyrosbag`)
 
 BabyROS includes a built-in tool for recording and playing back data, similar to ROS `rosbag`.
 
-**Discover active topics in the network:**
+You can view all available commands by running babyrosbag --help:
+
 ```bash
-babyros topics
+usage: babyrosbag [-h] {record,play,info,filter} ...
+
+BabyROS bag file utilities
+
+positional arguments:
+  {record,play,info,filter}
+                        Command to execute
+    record              Record topics to a bag file
+    play                Play a bag file
+    info                Print information about a bag file
+    filter              Filter messages from a bag file
+
+options:
+  -h, --help            show this help message and exit
 ```
 
-Record specific topics to a bag file:
-```bash
-babyrosbag record -O session.bag imu
-```
-(If you omit the topic names, it will automatically discover and record all active topics).
-
-View bag file info:
-```bash
-babyrosbag info session.bag
-```
-
-Play back recorded data:
-```bash
-babyrosbag play session.bag
-```
-
-(You can also adjust playback speed using the -r flag, e.g., babyrosbag play session.bag -r 2.0 for 2x speed).
+- `record`: Record topics to a bag file. If no topics are specified, it automatically discovers and records all active topics.
+  ```bash
+  babyrosbag record -O session.bag imu upper_body_tracking
+  ```
+- `play`: Play a bag file back into the BabyROS network. You can adjust the playback speed using the -r flag.
+  ```bash
+  babyrosbag play session.bag -r 2.0  # Plays at 2x speed
+  ```
+- `info`: Print summary information (duration, start/end time, topic message counts) about a bag file.
+  ```bash
+  babyrosbag info session.bag
+  ```
+- `filter`: Filter messages from a bag file into a new bag file using a Python expression.
+  ```bash
+  # Extract only the 'imu' topic
+  babyrosbag filter session.bag only_imu.bag "topic == 'imu'"
+  
+  # Filter by message content
+  babyrosbag filter session.bag filtered.bag "'counter' in msg and msg['counter'] > 50"
+  ```
 
 ## Open Issues
 - Datatype information  
