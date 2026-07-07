@@ -84,7 +84,7 @@ When testing is done, kill terminal with `Ctrl+C`.
 
 BabyROS includes a built-in tool for recording and playing back data, similar to ROS `rosbag`.
 
-You can view all available commands by running babyrosbag --help:
+You can view all available commands by running `babyrosbag --help`:
 
 ```bash
 usage: babyrosbag [-h] {record,play,info,filter} ...
