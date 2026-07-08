@@ -29,8 +29,10 @@ class Bag:
         self.start_time = None
         self.end_time = None
         
-        if mode in ('w', 'a'):
-            self.file = open(filename, 'ab')
+        if mode == 'w':
+            self.file = open(filename, 'wb')  # Overwrite
+        elif mode == 'a':
+            self.file = open(filename, 'ab')  # Append
         elif mode == 'r':
             if not os.path.exists(filename):
                 raise IOError(f"File {filename} not found")
