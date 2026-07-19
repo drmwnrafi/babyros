@@ -4,7 +4,6 @@ import time
 import re
 from collections import defaultdict
 
-# Pre-compile regex for blazing fast index building (fallback only).
 INDEX_PATTERN = re.compile(
     rb'"topic"\s*:\s*"((?:[^"\\]|\\.)*)"\s*,\s*'
     rb'"time"\s*:\s*\{\s*"secs"\s*:\s*(\d+)\s*,\s*"nsecs"\s*:\s*(\d+)\s*\}\s*,\s*'
@@ -56,13 +55,10 @@ class Bag:
         if file_size == 0:
             return False
             
-        # Read the last 64KB to find the footer
         chunk_size = min(65536, file_size)
         self.file.seek(file_size - chunk_size)
         chunk = self.file.read(chunk_size)
         
-        # --- THE FIX ---
-        # Strip trailing newlines so we don't end up with an empty last_line
         chunk = chunk.rstrip(b'\n\r')
         
         last_newline = chunk.rfind(b'\n')
@@ -70,7 +66,6 @@ class Bag:
             last_line = chunk[last_newline+1:]
         else:
             last_line = chunk
-        # ---------------
             
         try:
             footer = json.loads(last_line)
@@ -88,11 +83,9 @@ class Bag:
 
     def _build_index(self):
         """Reads the file to build topic info and time bounds."""
-        # Try to load from the fast footer first (O(1) speed)
         if self._read_footer():
             return
             
-        # Fallback: scan the whole file (only happens if file was created without a footer)
         self.file.seek(0)
         topics_info = self.topics_info
         start_time = None
@@ -171,7 +164,6 @@ class Bag:
         for line in self.file:
             try:
                 record = loads(line)
-                # Skip the index footer if it exists in the middle of the file (e.g. from appending)
                 if record.get("__bag_index__"):
                     continue
             except Exception:
@@ -214,7 +206,6 @@ class Bag:
     def close(self):
         if hasattr(self, 'file') and self.file:
             if self.mode in ('w', 'a'):
-                # Write index footer for instant loading next time
                 footer = {
                     "__bag_index__": True,
                     "topics": dict(self.topics_info),
