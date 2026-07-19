@@ -108,18 +108,23 @@ def cmd_play(args):
     console = Console()
     console.print(f"Playing {args.input} at {args.rate}x speed...")
     publishers = {}
-
     logger.disable("babyros")
+    console.print("Opening bag file...", style="dim")
 
+    t_start = time.time()
     with Bag(args.input, 'r') as bag:
-        console.print("Counting messages...", end=" ", style="dim")
-        total_messages = sum(1 for _ in bag.read_messages())
-        console.print(f"{total_messages} messages found.", style="dim")
+        t_loaded = time.time()
+        load_time = t_loaded - t_start
         
-        # Reset file pointer by reopening
-        bag.file.close()
-        bag = Bag(args.input, 'r')
+        if getattr(args, 'verbose', False):
+            console.print(f"Bag loaded in {load_time:.3f} seconds.", style="dim")
+        else:
+            console.print("Bag opened.", style="dim")
 
+        info = bag.get_type_and_topic_info()
+        total_messages = sum(t_info.message_count for t_info in info.topics.values())
+        console.print(f"Found {total_messages} messages.", style="dim")
+        
         total_duration = 0.0
         if bag.start_time and bag.end_time:
             total_duration = bag.end_time.to_sec() - bag.start_time.to_sec()
@@ -130,7 +135,6 @@ def cmd_play(args):
         last_topic = ""
         interrupted = False
 
-        # Create Rich progress bar
         progress = Progress(
             SpinnerColumn(),
             TextColumn("[bold blue]{task.description}"),
@@ -177,8 +181,8 @@ def cmd_play(args):
         if interrupted:
             console.print("\nPlayback interrupted.", style="yellow")
             return
+            
     console.print(f"Playback finished. {msg_count} messages published.", style="green")
-
 
 def cmd_info(args):
     try:
@@ -229,6 +233,7 @@ def main():
     parser_play = subparsers.add_parser('play', help='Play a bag file')
     parser_play.add_argument('input', help='Input bag file')
     parser_play.add_argument('-r', '--rate', type=float, default=1.0, help='Playback rate multiplier')
+    parser_play.add_argument('-v', '--verbose', action='store_true', help='Print detailed timing information')
 
     parser_info = subparsers.add_parser('info', help='Print information about a bag file')
     parser_info.add_argument('input', help='Input bag file')
