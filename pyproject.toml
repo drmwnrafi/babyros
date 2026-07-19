@@ -32,6 +32,7 @@ dependencies = [
     "numpy",
     "loguru",
     "rich>=15.0.0",
+    "PyYAML",
 ]
 
 [project.optional-dependencies]
@@ -48,9 +49,11 @@ Documentation = "https://docs.telekinesis.ai"
 [project.scripts]
 babyros = "babyros.cli:main"
 babyrosbag = "babyrosbag.cli:main" 
+babyrosbridge = "babyrosbridge.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/babyros", "src/babyrosbag"]
+packages = ["src/babyros", "src/babyrosbag", "src/babyrosbridge"]
+
